@@ -19,8 +19,9 @@ namespace WebApplication.Controllers
 {
     [Route("api")]
     [EnableCors("HDCorsPolicy")]
-    public class AddKnowledgeController : Controller{
-        
+    public class AddKnowledgeController : Controller
+    {
+
         private IKnowledgeService knowledgeService;
 
         private readonly ILogger logger;
@@ -37,16 +38,18 @@ namespace WebApplication.Controllers
             this.logger = loggerFactory.CreateLogger(nameof(AddKnowledgeController));
             this.settings = settings.Value;
         }
-        
+
         [HttpPut("collect")]
-        public async Task<AddResult> AddKnowledge(){
+        public async Task<AddResult> AddKnowledge()
+        {
             var itemId = Guid.NewGuid();
             var message = Request.Form["message"];
             var files = Request.Form.Files.ToList();
-            var filePaths = await SaveFiles(itemId,files);
+            var filePaths = await SaveFiles(itemId, files);
             var documents = ParseFiles(filePaths);
             var link = ParseFirstLink(message);
-            var item = new AddKnowledgeItemModel(){
+            var item = new AddKnowledgeItemModel()
+            {
                 Content = message,
                 Link = link,
                 Documents = documents
@@ -54,11 +57,13 @@ namespace WebApplication.Controllers
 
             this.knowledgeService.AddKnowledgeItem(item);
             return new AddResult("OK");
-            
+
         }
 
-        DocumentType GetTypeByExtension(string extension){
-            switch(extension){
+        DocumentType GetTypeByExtension(string extension)
+        {
+            switch (extension)
+            {
                 case "mp3":
                 case "wav":
                     return DocumentType.Audio;
@@ -74,17 +79,22 @@ namespace WebApplication.Controllers
             }
         }
 
-        private WebsiteMetaInfo LoadMetaInfosFromYoutube(){
-            return new WebsiteMetaInfo{
+        private WebsiteMetaInfo LoadMetaInfosFromYoutube()
+        {
+            return new WebsiteMetaInfo
+            {
                 Title = "Hallo Welt",
                 Description = "Das ist die Beschreibung der Webseite"
             };
         }
 
-        IEnumerable<DocumentModel> ParseFiles(IDictionary<string,Uri> files){
-            foreach (var item in files){
+        IEnumerable<DocumentModel> ParseFiles(IDictionary<string, Uri> files)
+        {
+            foreach (var item in files)
+            {
                 var info = new FileInfo(item.Key);
-                var model = new DocumentModel(){
+                var model = new DocumentModel()
+                {
                     Name = info.Name,
                     Source = item.Value.ToString(),
                     Type = GetTypeByExtension(info.Extension).ToString()
@@ -94,12 +104,15 @@ namespace WebApplication.Controllers
             }
         }
 
-        private LinkModel ParseFirstLink(string content){
+        private LinkModel ParseFirstLink(string content)
+        {
             string youtubePattern = @"^(https?\:\/\/)?(www\.)?(youtube\.com|youtu\.?be)\/.+$";
-            var youtubeMatch = Regex.Match(content,youtubePattern);
-            if (youtubeMatch.Length >= 1){
+            var youtubeMatch = Regex.Match(content, youtubePattern);
+            if (youtubeMatch.Length >= 1)
+            {
                 var info = LoadMetaInfosFromYoutube();
-                return new LinkModel{
+                return new LinkModel
+                {
                     Url = youtubeMatch.Value,
                     Title = info.Title,
                     Description = info.Description
@@ -107,10 +120,12 @@ namespace WebApplication.Controllers
             }
             return null;
         }
-        private async Task<IDictionary<string,Uri>> SaveFiles(Guid id, ICollection<IFormFile> files){
+        private async Task<IDictionary<string, Uri>> SaveFiles(Guid id, ICollection<IFormFile> files)
+        {
             this.logger.LogInformation($"Files: {files.Count}");
             var result = new Dictionary<string, Uri>();
-            foreach (var file in files){
+            foreach (var file in files)
+            {
                 var filename = ContentDispositionHeaderValue
                                 .Parse(file.ContentDisposition)
                                 .FileName
@@ -118,24 +133,30 @@ namespace WebApplication.Controllers
 
                 this.logger.LogInformation($"FileName: {filename}");
 
-                var credentials = new StorageCredentials(this.settings.AzureStorageName,this.settings.AzureStorageKey);
-                var storageAccount = new CloudStorageAccount(credentials,true);
+                var credentials = new StorageCredentials(this.settings.AzureStorageName, this.settings.AzureStorageKey);
+                var storageAccount = new CloudStorageAccount(credentials, true);
 
                 var fileClient = storageAccount.CreateCloudFileClient();
 
                 var share = fileClient.GetShareReference(this.settings.AzureStorageFileShareName);
 
-                if (await share.CreateIfNotExistsAsync()){
+                try
+                {
+                    await share.CreateIfNotExistsAsync();
                     var directory = share.GetRootDirectoryReference();
                     var fileRef = directory.GetFileReference(filename);
-                    if (await fileRef.DeleteIfExistsAsync()){
-                        using (var stream = file.OpenReadStream()){
-                            await fileRef.UploadFromStreamAsync(stream);
-                        }
-
-                        result.Add(filename,fileRef.Uri);
+                    await fileRef.DeleteIfExistsAsync();
+                    using (var stream = file.OpenReadStream())
+                    {
+                        await fileRef.UploadFromStreamAsync(stream);
                     }
+                    result.Add(filename, fileRef.Uri);
                 }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex);
+                }
+
             }
 
             return result;
