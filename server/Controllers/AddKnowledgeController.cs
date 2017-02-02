@@ -12,6 +12,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.Net.Http.Headers;
 using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Auth;
+using Microsoft.WindowsAzure.Storage.File;
 using WebApplication.Models;
 using WebApplication.Services;
 
@@ -139,18 +140,28 @@ namespace WebApplication.Controllers
                 var fileClient = storageAccount.CreateCloudFileClient();
 
                 var share = fileClient.GetShareReference(this.settings.AzureStorageFileShareName);
+                var sas = share.GetSharedAccessSignature(new SharedAccessFilePolicy()
+                {
+                    Permissions = SharedAccessFilePermissions.Write | SharedAccessFilePermissions.Create
+                });
 
                 try
                 {
-                    await share.CreateIfNotExistsAsync();
-                    var directory = share.GetRootDirectoryReference();
-                    var fileRef = directory.GetFileReference(filename);
-                    await fileRef.DeleteIfExistsAsync();
-                    using (var stream = file.OpenReadStream())
+                    if (await share.CreateIfNotExistsAsync())
                     {
-                        await fileRef.UploadFromStreamAsync(stream);
+                        var directory = share.GetRootDirectoryReference();
+                        var fileRef = directory.GetFileReference(filename);
+                        if (await fileRef.DeleteIfExistsAsync())
+                        {
+                            using (var stream = file.OpenReadStream())
+                            {
+                                await fileRef.UploadFromStreamAsync(stream);
+                            }
+                            result.Add(filename, fileRef.Uri);
+                        }
                     }
-                    result.Add(filename, fileRef.Uri);
+                    else 
+                        Console.WriteLine("This API requires Create or Write permissions.");
                 }
                 catch (Exception ex)
                 {
